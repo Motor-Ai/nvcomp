@@ -47,6 +47,7 @@ public:
 
     size_t data_size = std::accumulate(
         m_sizes.begin(), m_sizes.end(), static_cast<size_t>(0));
+        
     m_data = std::vector<uint8_t>(data_size);
 
     size_t offset = 0;
@@ -57,8 +58,74 @@ public:
     }
 
     std::vector<void*> src = get_input_ptrs(host_data, size(), chunk_size);
+    
     for (size_t i = 0; i < size(); ++i)
       std::memcpy(m_ptrs[i], src[i], m_sizes[i]);
+  }
+
+  // -> this function uses 2D vector host data with a predetermined max_output_size and batch_size
+  // -> 
+  BatchDataCPU(const std::vector<std::vector<char>>& host_data, std::vector<size_t> comp_sizes,
+               const size_t max_output_size, const size_t batch_size, bool copy_data) :
+      m_ptrs(),
+      m_sizes(),
+      m_data(),
+      m_size(batch_size)
+  {
+    m_size = batch_size;
+    m_sizes = comp_sizes;
+
+    size_t data_size = std::accumulate(m_sizes.begin(), m_sizes.end(), static_cast<size_t>(0));
+
+    m_data = std::vector<uint8_t>(data_size);
+
+    // size_t offset = 0;
+    // m_ptrs = std::vector<void*>(size());
+    // for (size_t i = 0; i < size(); ++i) {
+    //   m_ptrs[i] = data() + offset;
+    //   offset += m_sizes[i];
+    // }
+
+    // std::vector<void*> src = get_compressed_input_ptrs(host_data, comp_sizes, size(), max_output_size);
+    
+    // if (copy_data){
+    //   for (size_t i = 0; i < size(); ++i){
+    //     std::memcpy(m_ptrs[i], src[i], m_sizes[i]);
+    //   }
+    // }
+  }
+
+  BatchDataCPU(
+      const std::vector<std::vector<char>>& host_data,
+      const size_t chunk_size, bool copy_data) :
+      m_ptrs(),
+      m_sizes(),
+      m_data(),
+      m_size(0)
+  {
+    m_size = compute_batch_size(host_data, chunk_size);
+    m_sizes = compute_chunk_sizes(host_data, m_size, chunk_size);
+
+    size_t data_size = std::accumulate(
+        m_sizes.begin(), m_sizes.end(), static_cast<size_t>(0));
+        
+    m_data = std::vector<uint8_t>(data_size);
+
+    size_t offset = 0;
+    m_ptrs = std::vector<void*>(size());
+    for (size_t i = 0; i < size(); ++i) {
+      m_ptrs[i] = data() + offset;
+      offset += m_sizes[i];
+    }
+
+    std::vector<void*> src = get_input_ptrs(host_data, size(), chunk_size);
+    
+    if (copy_data){
+      for (size_t i = 0; i < size(); ++i){
+        std::memcpy(m_ptrs[i], src[i], m_sizes[i]);
+      }
+    }
+    
   }
 
   BatchDataCPU(const size_t max_output_size, const size_t batch_size) :
@@ -67,7 +134,7 @@ public:
       m_data(),
       m_size(batch_size)
   {
-    m_data = std::vector<uint8_t>(max_output_size * size());
+    m_data = std::vector<uint8_t>(max_output_size * size(), 0);
 
     m_sizes = std::vector<size_t>(size(), max_output_size);
 
@@ -76,6 +143,8 @@ public:
       m_ptrs[i] = data() + max_output_size * i;
     }
   }
+
+  
 
   // Copy Batchdata from GPU to CPU, or allocte output space based on GPU data.
   BatchDataCPU(

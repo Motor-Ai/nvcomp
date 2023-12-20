@@ -28,6 +28,7 @@
 
 #pragma once
 #include <cuda_runtime.h>
+#include "cuda.h"
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -87,9 +88,31 @@ std::vector<void*> get_input_ptrs(
   size_t chunk = 0;
   for (size_t i = 0; i < data.size(); ++i) {
     const size_t num_chunks = (data[i].size() + chunk_size - 1) / chunk_size;
-    for (size_t j = 0; j < num_chunks; ++j)
+    
+    for (size_t j = 0; j < num_chunks; ++j){
       input_ptrs[chunk++] = const_cast<void*>(
           static_cast<const void*>(data[i].data() + j * chunk_size));
+    }  
+  }
+  return input_ptrs;
+}
+
+std::vector<void*> get_compressed_input_ptrs(
+    const std::vector<std::vector<char>>& data,
+    std::vector<size_t> comp_sizes,
+    const size_t batch_size,
+    const size_t chunk_size)
+{
+  std::vector<void*> input_ptrs(batch_size);
+  size_t chunk = 0, offset = 0;
+
+  for (size_t i = 0; i < data.size(); ++i) {
+    
+    for (size_t j = 0; j < batch_size; ++j){
+      input_ptrs[chunk++] = const_cast<void*>(static_cast<const void*>(data[i].data() + j * chunk_size));
+      
+      offset += comp_sizes[j];
+    }
   }
   return input_ptrs;
 }

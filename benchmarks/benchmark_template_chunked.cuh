@@ -30,9 +30,9 @@
 #define NVCOMP_BENCHMARKS_BENCHMARK_TEMPLATE_CHUNKED_CUH
 
 // nvcc has a known issue with MSVC debug iterators, leading to a warning
-// hit by thrust::device_vector construction from std::vector below, so this
+// hit by nvcomp::thrust::device_vector construction from std::vector below, so this
 // pragma disables the warning.
-// More info at: https://github.com/NVIDIA/thrust/issues/1273
+// More info at: https://github.com/NVIDIA/nvcomp::thrust/issues/1273
 #ifdef __CUDACC__
 #pragma nv_diag_suppress 20011
 #endif

@@ -29,9 +29,9 @@
 #pragma once
 
 // nvcc has a known issue with MSVC debug iterators, leading to a warning
-// hit by thrust::device_vector construction from std::vector below, so this
+// hit by nvcomp::thrust::device_vector construction from std::vector below, so this
 // pragma disables the warning.
-// More info at: https://github.com/NVIDIA/thrust/issues/1273
+// More info at: https://github.com/NVIDIA/nvcomp::thrust/issues/1273
 #ifdef __CUDACC__
 #pragma nv_diag_suppress 20011
 #endif
@@ -78,6 +78,47 @@ public:
     }
   }
 
+  BatchData(
+      const std::vector<char*> host_data,
+      std::vector<size_t> comp_sizes,
+      const size_t batch_size,
+      const size_t chunk_size) :
+      m_ptrs(),
+      m_sizes(),
+      m_data(),
+      m_size(0)
+  {
+    size_t offset = 0;
+    m_size = batch_size;
+
+    size_t data_size = std::accumulate(
+        comp_sizes.data(),
+        comp_sizes.data() + size(),
+        static_cast<size_t>(0)); 
+
+    m_data = nvcomp::thrust::device_vector<uint8_t>(data_size);
+
+
+    std::vector<void*> uncompressed_ptrs(size());
+    for (size_t i = 0; i < size(); ++i) {
+      uncompressed_ptrs[i] = const_cast<void*>(static_cast<const void*>(data() + offset));
+      offset += comp_sizes[i];
+    }
+
+    m_ptrs = nvcomp::thrust::device_vector<void*>(uncompressed_ptrs);
+    // //std::vector<size_t> sizes = compute_chunk_sizes(host_data, size(), chunk_size);
+    m_sizes = nvcomp::thrust::device_vector<size_t>(comp_sizes);
+
+    // // copy data to GPU
+    
+    const size_t* bytes = comp_sizes.data();
+    for (size_t i = 0; i < size(); ++i){
+      
+      CUDA_CHECK(
+          cudaMemcpy(uncompressed_ptrs[i], const_cast<void*>(static_cast<const void*>(host_data[i])), bytes[i], cudaMemcpyHostToDevice));
+    }
+  }
+
   BatchData(const BatchDataCPU& batch_data, bool copy_data = false) :
       m_ptrs(),
       m_sizes(),
@@ -105,9 +146,11 @@ public:
     if (copy_data) {
       const void* const* src = batch_data.ptrs();
       const size_t* bytes = batch_data.sizes();
-      for (size_t i = 0; i < size(); ++i)
+      for (size_t i = 0; i < size(); ++i){
+        
         CUDA_CHECK(
             cudaMemcpy(ptrs[i], src[i], bytes[i], cudaMemcpyHostToDevice));
+      }     
     }
   }
 
@@ -168,6 +211,7 @@ public:
   }
 
 private:
+  // instead of nvcomp::nvcomp::thrust -> nvcomp::thrust 
   nvcomp::thrust::device_vector<void*> m_ptrs;
   nvcomp::thrust::device_vector<size_t> m_sizes;
   nvcomp::thrust::device_vector<uint8_t> m_data;
