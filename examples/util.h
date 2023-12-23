@@ -110,6 +110,8 @@ std::vector<void*> get_compressed_input_ptrs(
     
     for (size_t j = 0; j < batch_size; ++j){
       input_ptrs[chunk++] = const_cast<void*>(static_cast<const void*>(data[i].data() + j * chunk_size));
+
+      input_ptrs[chunk++] = const_cast<void*>(static_cast<const void*>(data[i].data() + offset));
       
       offset += comp_sizes[j];
     }

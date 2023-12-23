@@ -79,20 +79,21 @@ public:
 
     m_data = std::vector<uint8_t>(data_size);
 
-    // size_t offset = 0;
-    // m_ptrs = std::vector<void*>(size());
-    // for (size_t i = 0; i < size(); ++i) {
-    //   m_ptrs[i] = data() + offset;
-    //   offset += m_sizes[i];
-    // }
+    size_t offset = 0;
+    m_ptrs = std::vector<void*>(size());
+    for (size_t i = 0; i < size(); ++i) {
+      m_ptrs[i] = data() + offset;
+      offset += m_sizes[i];
+    }
 
-    // std::vector<void*> src = get_compressed_input_ptrs(host_data, comp_sizes, size(), max_output_size);
+    // not useful
+    std::vector<void*> src = get_compressed_input_ptrs(host_data, comp_sizes, size(), max_output_size);
     
-    // if (copy_data){
-    //   for (size_t i = 0; i < size(); ++i){
-    //     std::memcpy(m_ptrs[i], src[i], m_sizes[i]);
-    //   }
-    // }
+    if (copy_data){
+      for (size_t i = 0; i < size(); ++i){
+        std::memcpy(m_ptrs[i], src[i], m_sizes[i]);
+      }
+    }
   }
 
   BatchDataCPU(
@@ -125,6 +126,42 @@ public:
         std::memcpy(m_ptrs[i], src[i], m_sizes[i]);
       }
     }
+    
+  }
+
+  // there is no copy data mechanism
+  // considers the total byte size and creates an 1-d array of that size
+  // creating pointers based on number of bytes each chunk takes
+  BatchDataCPU(
+      const size_t total_bytes, std::vector<size_t> comp_sizes,
+      const size_t batch_size) :
+      m_ptrs(),
+      m_sizes(),
+      m_data(),
+      m_size(0)
+  {
+    m_size = batch_size;
+    m_sizes = comp_sizes;
+
+    size_t data_size = std::accumulate(
+        m_sizes.begin(), m_sizes.end(), static_cast<size_t>(0));
+        
+    m_data = std::vector<uint8_t>(total_bytes);
+
+    size_t offset = 0;
+    m_ptrs = std::vector<void*>(size());
+    for (size_t i = 0; i < size(); ++i) {
+      m_ptrs[i] = data() + offset;
+      offset += m_sizes[i];
+    }
+
+    // std::vector<void*> src = get_input_ptrs(host_data, size(), chunk_size);
+    
+    // if (copy_data){
+    //   for (size_t i = 0; i < size(); ++i){
+    //     std::memcpy(m_ptrs[i], src[i], m_sizes[i]);
+    //   }
+    // }
     
   }
 
@@ -172,6 +209,9 @@ public:
       m_ptrs[i] = data() + offset;
       offset += sizes()[i];
     }
+
+    
+
     if (copy_data) {
       std::vector<void*> hs_ptrs(size());
       CUDA_CHECK(cudaMemcpy(
@@ -182,8 +222,10 @@ public:
 
       for (size_t i = 0; i < size(); ++i) {
         const uint8_t* rhptr = reinterpret_cast<const uint8_t*>(hs_ptrs[i]);
+        
         CUDA_CHECK(
             cudaMemcpy(m_ptrs[i], rhptr, m_sizes[i], cudaMemcpyDeviceToHost));
+
       }
     }
   }

@@ -30,6 +30,7 @@
  #include "zlib.h"
  #include "libdeflate.h"
  #include "nvcomp/deflate.h"
+ #include <opencv2/opencv.hpp>  
 
  extern "C" {
 
@@ -37,34 +38,31 @@
         char* data;
         size_t* sizes;
         size_t size;
-    } CharVector;
+        size_t total_bytes;
+        size_t input_batch_size;
+        size_t input_chunk_size;
+    } CompressedVector;
 
-    char* concatenateStrings(const std::vector<char*>& stringVector, std::vector<size_t> compressed_sizes_host) {
+    void concatanate_compressed_chunks(const std::vector<char*> data, std::vector<size_t> compressed_sizes_host,
+                                       char* &data_array) {
         // Calculate the total length needed for the concatenated string
-        size_t totalLength = 0; // 1 for null terminator
+        size_t total_bytes = 0; // 1 for null terminator
         size_t index = 0;
 
         for(int i=0; i < compressed_sizes_host.size(); i++){
-            totalLength += compressed_sizes_host[i];
+            total_bytes += compressed_sizes_host[i];
         }
 
-        std::cout << "pre cout before:: " << totalLength << std::endl;
+        // std::cout << "pre cout before:: " << totalLength << std::endl;
         // Allocate memory for the concatenated string
-        char* result = new char[totalLength];
+        // char* data_array = new char[totalLength];
         
-        for (const char* str : stringVector) {
-            if(index == 0){
-                std::strcpy(result, str);
-            }    
-
-            else{
-                std::strcat(result, str);
+        for(int i = 0; i < data.size(); i++){
+            for(int j = 0; j < compressed_sizes_host[i]; j++){
+                data_array[index] = data[i][j];
+                index++;
             }
-
-            index++;
         }
-        
-        return result;
     }
 
     BatchDataCPU GetBatchDataCPU(const BatchData& batch_data, bool copy_data)
@@ -78,8 +76,30 @@
         return compress_data_cpu;
     }
 
+    void convert_to_vector(char* data, std::vector<size_t> compressed_sizes_host, size_t batch_size,
+                           std::vector<char*> &comp_vector){
+        
+        size_t byte_size;
+        size_t offset = 0;
+
+        for (int i = 0; i < batch_size; i++){
+            byte_size = compressed_sizes_host[i];
+            char* tmp_buf = new char[byte_size];
+            
+            memcpy(tmp_buf, data + offset /* offset/ starting idx */, byte_size /* length */);
+            comp_vector.push_back(tmp_buf);
+
+            offset += byte_size;
+        }
+    }
+
+    void destroy_mem(CompressedVector data){
+        delete data.data;
+        delete data.sizes;
+    }
+
     // Benchmark performance from the binary data file fname
-    CharVector run_example(CharVector image_vector)
+    CompressedVector run_example(CompressedVector image_vector)
     {
         std::vector<char> host_data(image_vector.data, image_vector.data + image_vector.size);
         std::vector<std::vector<char>> data; 
@@ -177,70 +197,22 @@
         
         // Allocate and prepare output/compressed batch
         BatchDataCPU compress_data_cpu = GetBatchDataCPU(compress_data, true);
+        BatchDataCPU input_data_cpu = GetBatchDataCPU(input_data, true);
 
-        
-        //    BatchDataCPU decompress_data_cpu = GetBatchDataCPU(input_data, false);
 
-        //    // loop over chunks on the CPU, decompressing each one
-        //    for (size_t i = 0; i < input_data.size(); ++i) {
-        //      if(algo==0){
-        //          struct libdeflate_decompressor  *decompressor;
-        //          decompressor = libdeflate_alloc_decompressor();
-        //          enum libdeflate_result res = libdeflate_deflate_decompress(decompressor, compress_data_cpu.ptrs()[i], compress_data_cpu.sizes()[i], 
-        //                                                     decompress_data_cpu.ptrs()[i], decompress_data_cpu.sizes()[i], NULL);
-            
-        //         if (res != LIBDEFLATE_SUCCESS) {
-        //         throw std::runtime_error(
-        //             "libdeflate CPU failed to decompress chunk " + std::to_string(i) + ".");
-        //         }
-        //      }else if (algo==1){
-        //          z_stream zs1;
-        //          zs1.zalloc = NULL;
-        //          zs1.zfree = NULL;
-        //          zs1.msg = NULL;
-        //          zs1.next_in = (Bytef*)compress_data_cpu.ptrs()[i];
-        //          zs1.avail_in = compress_data_cpu.sizes()[i];
-        //          zs1.next_out = (Bytef*)decompress_data_cpu.ptrs()[i];
-        //          zs1.avail_out = decompress_data_cpu.sizes()[i];
-        
-        //          int ret = inflateInit2(&zs1, -15);
-        //          if (ret != Z_OK) {
-        //             throw std::runtime_error("inflateInit2 error " + std::to_string(ret));
-        //          }
-        //          if ((ret = inflate(&zs1, Z_FINISH)) != Z_STREAM_END) {
-        //             throw std::runtime_error("zlib::inflate operation fail " + std::to_string(ret));;
-        //              if ((ret = inflateEnd(&zs1)) != Z_OK) {
-        //                 throw std::runtime_error("Call to inflateEnd failed: " + std::to_string(ret));
-        //              }
-        //          }
-        //          if ((ret = inflateEnd(&zs1)) != Z_OK) {
-        //             throw std::runtime_error("Call to inflateEnd failed: " + std::to_string(ret));
-        //          }
-        //      }
-        //    }
-        //    // Validate decompressed data against input
-        //    if (!(decompress_data_cpu == input_data))
-        //      throw std::runtime_error("Failed to validate CPU decompressed data");
-        //    else
-        //      std::cout << "CPU decompression validated :)" << std::endl;
-
-        CharVector example_data;
+        CompressedVector example_data;
         example_data.data = new char[comp_bytes];
         example_data.sizes = new size_t[compress_data_cpu.size()];
-        example_data.size = comp_bytes;
+        example_data.size = compress_data_cpu.size();
+        example_data.total_bytes = comp_bytes;
+        example_data.input_batch_size = input_data.size();
+        example_data.input_chunk_size = chunk_size;
 
-        for(int i=0; i < compress_data_cpu.size(); i++){
-            
-            // std::cout << "compressed data size:: " <<  << std::endl;
+        int offset = 0;
 
-            // if(i == 0){
-            //     std::strcpy(example_data.data, static_cast<const char*>(compress_data_cpu.ptrs()[i]));
-            // }
-            // else{
-            //     std::strcat(example_data.data, static_cast<const char*>(compress_data_cpu.ptrs()[i]));
-            // }
+        for(int i=0; i < compress_data_cpu.size(); i++){            
             
-            
+            offset += compressed_sizes_host[i];
             char* tmp_data = static_cast<char*>(compress_data_cpu.ptrs()[i]);
             comp_vector.push_back(tmp_data);
             
@@ -250,32 +222,78 @@
         cudaEventDestroy(start);
         cudaEventDestroy(end);
         cudaStreamDestroy(stream);
-
-        // example_data.data = concatenateStrings(comp_vector, compressed_sizes_host);
-
-        example_data.data = concatenateStrings(comp_vector, compressed_sizes_host);
+        
+        concatanate_compressed_chunks(comp_vector, compressed_sizes_host, example_data.data);
+        
         return example_data;
     }
 
-    void run_decompression(CharVector compressed_vector){
+    void run_decompression(CompressedVector compressed_vector){
         
-        size_t total_bytes = 0;
-        std::vector<char> host_data(compressed_vector.data, compressed_vector.data + compressed_vector.size);
-        std::vector<std::vector<char>> data; 
+        std::vector<size_t> comp_sizes(compressed_vector.sizes, compressed_vector.sizes + compressed_vector.size);
 
-        data.push_back(host_data);
+        std::vector<char*> reconverted_comp;
+        convert_to_vector(compressed_vector.data, comp_sizes, compressed_vector.size, reconverted_comp);
 
-        const size_t chunk_size = 1 << 16;
-        size_t input_data_size = 243;
+        BatchData compressed_data(reconverted_comp, comp_sizes, compressed_vector.size);
+        BatchData decomp_data(compressed_vector.input_chunk_size, compressed_vector.input_batch_size);
 
-        for(int i=0; i < input_data_size; i++){
-            total_bytes += compressed_vector.sizes[i];
+        // Create CUDA stream
+        cudaStream_t stream;
+        cudaStreamCreate(&stream);
+        
+        // CUDA events to measure decompression time
+        cudaEvent_t start, end;
+        cudaEventCreate(&start);
+        cudaEventCreate(&end);
+
+        // deflate GPU decompression
+        size_t decomp_temp_bytes;
+
+        nvcompStatus_t status = nvcompBatchedDeflateDecompressGetTempSize(compressed_data.size(), compressed_vector.input_chunk_size, 
+                                                                          &decomp_temp_bytes);
+        if (status != nvcompSuccess) {
+            throw std::runtime_error("nvcompBatchedDeflateDecompressGetTempSize() failed.");
         }
-
-        std::cout << "total recalculated bytes:: " << total_bytes << std::endl;
         
-        // BatchDataCPU compressed_data_cpu(data, chunk_size, true);
-
+        void* d_decomp_temp;
+        CUDA_CHECK(cudaMalloc(&d_decomp_temp, decomp_temp_bytes));
         
+        size_t* d_decomp_sizes;
+        CUDA_CHECK(cudaMalloc(&d_decomp_sizes, decomp_data.size() * sizeof(size_t)));
+        
+        nvcompStatus_t* d_status_ptrs;
+        CUDA_CHECK(cudaMalloc(&d_status_ptrs, decomp_data.size() * sizeof(nvcompStatus_t)));
+        
+        CUDA_CHECK(cudaStreamSynchronize(stream));
+        
+        // Run decompression
+        status = nvcompBatchedDeflateDecompressAsync(
+            compressed_data.ptrs(),
+            compressed_data.sizes(),
+            decomp_data.sizes(),
+            d_decomp_sizes,
+            compressed_data.size(),
+            d_decomp_temp,
+            decomp_temp_bytes,
+            decomp_data.ptrs(),
+            d_status_ptrs,
+            stream);
+        if( status != nvcompSuccess){
+            throw std::runtime_error("ERROR: nvcompBatchedDeflateDecompressAsync() not successful");
+        }
+        
+        
+        cudaFree(d_decomp_temp);
+        
+        cudaEventDestroy(start);
+        cudaEventDestroy(end);
+        cudaStreamDestroy(stream);
+
+        BatchDataCPU decomp_data_cpu(decomp_data.ptrs(), decomp_data.sizes(), decomp_data.data(), decomp_data.size(), true);
+        
+        cv::Mat img(2048, 2592, CV_8UC3, decomp_data_cpu.data());
+        // cv::cvtColor(img, img, cv::COLOR_BGR2RGB);
+        cv::imwrite("/home/benchmarker/myimage.png", img);
     }
  }

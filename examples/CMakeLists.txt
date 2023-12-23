@@ -40,8 +40,14 @@ if (LZ4_INCLUDE_DIR AND LZ4_LIBRARY)
   target_include_directories(lz4_cpu_decompression PRIVATE ${LZ4_INCLUDE_DIR})
   target_link_libraries(lz4_cpu_decompression PRIVATE ${LZ4_LIBRARY})
 
+  # shared library generation for the application
+  find_package(OpenCV REQUIRED)
   add_library(deflate_comp_decomp_gpu SHARED deflate_comp_decomp_gpu.cu)
-  target_link_libraries(deflate_comp_decomp_gpu PRIVATE nvcomp::nvcomp CUDA::cudart)
+  target_include_directories(deflate_comp_decomp_gpu PRIVATE ${OpenCV_INCLUDE_DIRS})
+  target_link_libraries(deflate_comp_decomp_gpu PRIVATE nvcomp::nvcomp ${OpenCV_LIBS} CUDA::cudart)
+  
+  # add_library(deflate_comp_decomp_gpu SHARED deflate_comp_decomp_gpu.cu)
+  # target_link_libraries(deflate_comp_decomp_gpu PRIVATE nvcomp::nvcomp CUDA::cudart)
   
 else()
   message(WARNING "Skipping building LZ4 CPU example, as no LZ4 library was found.")

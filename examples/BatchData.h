@@ -81,8 +81,7 @@ public:
   BatchData(
       const std::vector<char*> host_data,
       std::vector<size_t> comp_sizes,
-      const size_t batch_size,
-      const size_t chunk_size) :
+      const size_t batch_size) :
       m_ptrs(),
       m_sizes(),
       m_data(),
