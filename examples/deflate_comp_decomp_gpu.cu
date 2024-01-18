@@ -76,7 +76,7 @@
         return compress_data_cpu;
     }
 
-    void convert_to_vector(char* data, std::vector<size_t> compressed_sizes_host, size_t batch_size,
+    void convert_to_vector(char* data, std::vector<size_t> compressed_sizes_host, size_t batch_size, 
                            std::vector<char*> &comp_vector){
         
         size_t byte_size;
