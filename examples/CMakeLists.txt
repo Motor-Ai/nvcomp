@@ -29,6 +29,7 @@ endif()
 # Add LZ4 CPU executable
 find_path(LZ4_INCLUDE_DIR NAMES lz4.h)
 find_library(LZ4_LIBRARY NAMES lz4)
+
 if (LZ4_INCLUDE_DIR AND LZ4_LIBRARY) 
   # lz4 CPU example requires lz4 libraries
   add_executable(lz4_cpu_compression lz4_cpu_compression.cu)
@@ -48,6 +49,17 @@ if (LZ4_INCLUDE_DIR AND LZ4_LIBRARY)
   
   # add_library(deflate_comp_decomp_gpu SHARED deflate_comp_decomp_gpu.cu)
   # target_link_libraries(deflate_comp_decomp_gpu PRIVATE nvcomp::nvcomp CUDA::cudart)
+  # shared lib generate for compression pipeline
+  find_package(OpenCV REQUIRED)
+  add_library(compression_pipeline_gpu SHARED compression_pipeline_gpu.cu)
+  target_include_directories(compression_pipeline_gpu PRIVATE ${OpenCV_INCLUDE_DIRS})
+  target_link_libraries(compression_pipeline_gpu PRIVATE nvcomp::nvcomp ${OpenCV_LIBS} CUDA::cudart)
+
+  # shared lib generate for compression pipeline
+  find_package(OpenCV REQUIRED)
+  add_library(decompression_pipeline_gpu SHARED decompression_pipeline_gpu.cu)
+  target_include_directories(decompression_pipeline_gpu PRIVATE ${OpenCV_INCLUDE_DIRS})
+  target_link_libraries(decompression_pipeline_gpu PRIVATE nvcomp::nvcomp ${OpenCV_LIBS} CUDA::cudart)
   
 else()
   message(WARNING "Skipping building LZ4 CPU example, as no LZ4 library was found.")

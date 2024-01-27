@@ -15,9 +15,8 @@ list( APPEND CMAKE_MODULE_PATH
 )
 
 find_package(CUDAToolkit REQUIRED)
+find_package(CUDA REQUIRED)
 find_package(nvcomp 3.0.3 REQUIRED)
-
-add_compile_definitions("THRUST_CUB_WRAPPED_NAMESPACE=nvcomp")
 
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU" OR
     "${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang" OR
@@ -94,6 +93,8 @@ if(NOT CUB_HEADER)
   message(FATAL_ERROR "Unable to locate 'cub/cub.cuh'. Please specify a path "
       "to cub via 'CUB_DIR'")
 endif()
+
+add_compile_definitions("THRUST_CUB_WRAPPED_NAMESPACE=nvcomp")
 
 if(NOT DEFINED NVCOMP_EXTS_ROOT AND DEFINED ENV{NVCOMP_EXTS_ROOT})
   set(NVCOMP_EXTS_ROOT "$ENV{NVCOMP_EXTS_ROOT}")

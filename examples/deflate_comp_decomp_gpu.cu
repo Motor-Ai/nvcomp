@@ -28,8 +28,10 @@
 
  #include "BatchData.h"
  #include "zlib.h"
- #include "libdeflate.h"
  #include "nvcomp/deflate.h"
+ #include "nvcomp/bitcomp.h"
+ #include "nvcomp/zstd.h"
+ #include "nvcomp/gdeflate.h"
  #include <opencv2/opencv.hpp>  
 
  extern "C" {
@@ -38,6 +40,7 @@
         char* data;
         size_t* sizes;
         size_t size;
+        char* compression;
         size_t total_bytes;
         size_t input_batch_size;
         size_t input_chunk_size;
@@ -104,7 +107,6 @@
         std::vector<char> host_data(image_vector.data, image_vector.data + image_vector.size);
         std::vector<std::vector<char>> data; 
         std::vector<char*> comp_vector;
-        // std::vector<char> host_data = readFile("/home/benchmarker/Downloads/high_res.jpg");
         data.push_back(host_data);
 
         size_t total_bytes = 0;
@@ -112,6 +114,7 @@
             total_bytes += part.size();
         }
         
+        std::cout << "compression algorithm:: " << image_vector.compression << std::endl;
         std::cout << "----------" << std::endl;
         std::cout << "files: " << data.size() << std::endl;
         std::cout << "uncompressed (B): " << total_bytes << std::endl;
@@ -152,6 +155,21 @@
         cudaEventCreate(&end);
         cudaEventRecord(start, stream);
         
+        // status = nvcompBatchedDeflateCompressAsync(
+        //     input_data.ptrs(),
+        //     input_data.sizes(),
+        //     chunk_size,
+        //     input_data.size(),
+        //     d_comp_temp,
+        //     comp_temp_bytes,
+        //     compress_data.ptrs(),
+        //     compress_data.sizes(),
+        //     nvcompBatchedDeflateOpts,
+        //     stream);
+        // if (status != nvcompSuccess) {
+        //     throw std::runtime_error("nvcompBatchedDeflateCompressAsync() failed.");
+        // }
+
         status = nvcompBatchedDeflateCompressAsync(
             input_data.ptrs(),
             input_data.sizes(),
@@ -164,7 +182,7 @@
             nvcompBatchedDeflateOpts,
             stream);
         if (status != nvcompSuccess) {
-            throw std::runtime_error("nvcompBatchedDeflateCompressAsync() failed.");
+            throw std::runtime_error("nvcompBatchedZstdCompressAsync() failed.");
         }
         
         cudaEventRecord(end, stream);
@@ -229,7 +247,7 @@
     }
 
     void run_decompression(CompressedVector compressed_vector){
-        
+
         std::vector<size_t> comp_sizes(compressed_vector.sizes, compressed_vector.sizes + compressed_vector.size);
 
         std::vector<char*> reconverted_comp;
@@ -292,8 +310,9 @@
 
         BatchDataCPU decomp_data_cpu(decomp_data.ptrs(), decomp_data.sizes(), decomp_data.data(), decomp_data.size(), true);
         
-        cv::Mat img(2048, 2592, CV_8UC3, decomp_data_cpu.data());
-        // cv::cvtColor(img, img, cv::COLOR_BGR2RGB);
-        cv::imwrite("/home/benchmarker/myimage.png", img);
+
+        // cv::Mat img(2048, 2592, CV_8UC3, decomp_data_cpu.data());
+        // // cv::cvtColor(img, img, cv::COLOR_BGR2RGB);
+        // cv::imwrite("/home/benchmarker/myimage.png", img);
     }
  }

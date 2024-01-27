@@ -36,11 +36,83 @@
 #pragma nv_diag_suppress 20011
 #endif
 
+#include "nvcomp.hpp"
+#include <thrust/device_vector.h>
 #include "BatchDataCPU.h"
+
+namespace nvcomp {
+
+  static constexpr uint32_t WARP_SIZE = 32;
+
+  template <typename U, typename T>
+  constexpr __host__ __device__ U roundUpDiv(U const num, T const chunk)
+  {
+    return (num + chunk - 1) / chunk;
+  }
+
+  template <typename U, typename T>
+  constexpr __host__ __device__ U roundDownTo(U const num, T const chunk)
+  {
+    return (num / chunk) * chunk;
+  }
+
+  template <typename U, typename T>
+  constexpr __host__ __device__ U roundUpTo(U const num, T const chunk)
+  {
+    return roundUpDiv(num, chunk) * chunk;
+  }
+
+}
 
 class BatchData
 {
 public:
+
+  BatchData(
+      const std::vector<std::vector<char>>& host_data) :
+      m_ptrs(),
+      m_sizes(),
+      m_data(),
+      m_size(0)
+  {
+    m_size = host_data.size();
+
+    // find max chunk size and build prefixsum
+    std::vector<size_t> prefixsum(m_size+1,0);
+    size_t chunk_size = 0;
+    for (size_t i = 0; i < m_size; ++i) {
+      if (chunk_size < host_data[i].size()) {
+        chunk_size = host_data[i].size();
+      }
+      // align to 8B boundaries for now
+      // TODO: Set appropriate alignment based on reqs for each compressor
+      prefixsum[i+1] = nvcomp::roundUpTo(prefixsum[i] + host_data[i].size(), 8);
+    }
+
+    m_data = nvcomp::thrust::device_vector<uint8_t>(prefixsum.back());
+
+    std::vector<void*> uncompressed_ptrs(size());
+    for (size_t i = 0; i < size(); ++i) {
+      uncompressed_ptrs[i] = static_cast<void*>(data() + prefixsum[i]);
+    }
+
+    m_ptrs = nvcomp::thrust::device_vector<void*>(uncompressed_ptrs);
+    std::vector<size_t> sizes(m_size);
+    for (size_t i = 0; i < sizes.size(); ++i) {
+      sizes[i] = host_data[i].size();
+    }
+    m_sizes = nvcomp::thrust::device_vector<size_t>(sizes);
+
+    // copy data to GPU
+    for (size_t i = 0; i < host_data.size(); ++i) {
+      CUDA_CHECK(cudaMemcpy(
+          uncompressed_ptrs[i],
+          host_data[i].data(),
+          host_data[i].size(),
+          cudaMemcpyHostToDevice));
+    }
+  }
+
   BatchData(
       const std::vector<std::vector<char>>& host_data,
       const size_t chunk_size) :
