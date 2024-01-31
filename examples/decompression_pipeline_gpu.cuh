@@ -9,6 +9,9 @@
 extern "C++"{
     typedef struct {
         char* data;
+        char* frame_id;
+        int sec;
+        uint nanosec;
         size_t* sizes;
         size_t size;
         char* compression;
