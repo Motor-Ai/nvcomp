@@ -46,12 +46,13 @@ extern "C++"{
     void convert_to_vector(char* data, std::vector<size_t> compressed_sizes_host, size_t batch_size, 
                            std::vector<char*> &comp_vector){
         
-        size_t byte_size;
+        int byte_size;
         size_t offset = 0;
 
         for (int i = 0; i < batch_size; i++){
             byte_size = compressed_sizes_host[i];
             char* tmp_buf = new char[byte_size];
+            // char *tmp_buf = malloc(sizeof(char) * byte_size);
             
             memcpy(tmp_buf, data + offset /* offset/ starting idx */, byte_size /* length */);
             comp_vector.push_back(tmp_buf);
@@ -159,9 +160,27 @@ extern "C++"{
             decompressed_sizes_host.push_back(decomp_data_cpu.sizes()[i]);
         }
 
+        size_t total_bytes = 0;
+        for (const size_t s : decompressed_sizes_host) {
+            total_bytes += s;
+        }
+        float ms;
+        cudaEventElapsedTime(&ms, start, end);
+
+        std::cout << "compression throughput (GB/s): "
+                  << (double)total_bytes / (1.0e6 * ms) << std::endl;
+
+        // delete all the memory reserved for compressed data, otherwise it causes memory leak
+        // convert_to_vector -> this function was used to add multiple char* in reconverted_comp vector
+        for(int j=0; j < reconverted_comp.size(); j++){
+            delete reconverted_comp[j];
+        }
+
         cudaEventDestroy(start);
         cudaEventDestroy(end);
         cudaStreamDestroy(stream);
+
+        reconverted_comp.clear();
         
         concatanate_compressed_chunks(decomp_vector, decompressed_sizes_host, example_data.data);
 
